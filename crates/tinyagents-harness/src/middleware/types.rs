@@ -241,6 +241,20 @@ pub trait Middleware<State: Send + Sync, Ctx: Send + Sync = ()>: Send + Sync {
         Ok(())
     }
 
+    /// Transform the final request only after model-control admission commits.
+    ///
+    /// This observer boundary runs after jump/pause/cancel checkpoints and model
+    /// resolution, immediately before the model pipeline. It is for ephemeral
+    /// request content; admission policy belongs in `before_model_control`.
+    async fn before_model_dispatch(
+        &self,
+        _ctx: &mut RunContext<Ctx>,
+        _state: &State,
+        _request: &mut ModelRequest,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// Runs for each streamed [`ModelDelta`] before it is forwarded or
     /// accumulated, allowing inspection or transformation of the chunk.
     async fn on_model_delta(

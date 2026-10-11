@@ -83,7 +83,7 @@ impl<State: Send + Sync, Ctx: Send + Sync> Middleware<State, Ctx>
         Ok(())
     }
 
-    async fn before_model(
+    async fn before_model_dispatch(
         &self,
         context: &mut RunContext<Ctx>,
         _state: &State,
@@ -116,5 +116,5 @@ impl<State: Send + Sync, Ctx: Send + Sync> Middleware<State, Ctx>
 }
 
 #[cfg(test)]
-#[path = "../ephemeral_instructions_tests.rs"]
+#[path = "mod_tests.rs"]
 mod tests;

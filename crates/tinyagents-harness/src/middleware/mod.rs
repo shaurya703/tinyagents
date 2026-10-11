@@ -282,6 +282,22 @@ impl<State: Send + Sync, Ctx: Send + Sync> MiddlewareStack<State, Ctx> {
             .before_model_control(ctx, state, request))
     }
 
+    /// Run final request observers after model-control admission commits.
+    pub async fn run_before_model_dispatch(
+        &self,
+        ctx: &mut RunContext<Ctx>,
+        state: &State,
+        request: &mut ModelRequest,
+    ) -> Result<()> {
+        for middleware in &self.middlewares {
+            if let Err(error) = middleware.before_model_dispatch(ctx, state, request).await {
+                self.fan_out_on_error(ctx, &error).await;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Runs `before_model` while refreshing the selected profile before each
     /// hook. Earlier hooks may change the model or required capabilities.
     pub async fn run_before_model_with_profile<P, F>(

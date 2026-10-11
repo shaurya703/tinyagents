@@ -31,7 +31,7 @@ async fn ephemeral_instructions_are_delivered_once_without_changing_the_source_h
     let original = request();
     let mut outgoing = original.clone();
     injector
-        .before_model(&mut context, &(), &mut outgoing)
+        .before_model_dispatch(&mut context, &(), &mut outgoing)
         .await
         .unwrap();
     assert_eq!(original.messages.len(), 3);
@@ -39,7 +39,7 @@ async fn ephemeral_instructions_are_delivered_once_without_changing_the_source_h
     assert_eq!(outgoing.messages[4].text(), "second");
     let mut next = original.clone();
     injector
-        .before_model(&mut context, &(), &mut next)
+        .before_model_dispatch(&mut context, &(), &mut next)
         .await
         .unwrap();
     assert_eq!(next.messages, original.messages);
@@ -60,7 +60,7 @@ async fn ephemeral_instructions_for_hoisting_models_keep_the_system_prefix_uncha
     let mut outgoing = request();
     let prefix = outgoing.messages[0].clone();
     injector
-        .before_model(&mut context, &(), &mut outgoing)
+        .before_model_dispatch(&mut context, &(), &mut outgoing)
         .await
         .unwrap();
     assert_eq!(outgoing.messages.len(), 3);
@@ -104,7 +104,7 @@ async fn ephemeral_instructions_are_isolated_by_context_instance() {
     let injector = queue.middleware();
     let mut outgoing = request();
     injector
-        .before_model(&mut first, &(), &mut outgoing)
+        .before_model_dispatch(&mut first, &(), &mut outgoing)
         .await
         .unwrap();
     assert_eq!(outgoing.messages.last().unwrap().text(), "first run");
@@ -161,7 +161,7 @@ impl Middleware<(), ()> for RequestCapture {
     fn name(&self) -> &str {
         "request_capture"
     }
-    async fn before_model(
+    async fn before_model_dispatch(
         &self,
         _: &mut RunContext,
         _: &(),
@@ -219,6 +219,75 @@ async fn native_tool_corrections_reach_the_next_request_without_entering_history
     assert_eq!(requests.len(), 2);
     assert!(
         requests[1]
+            .messages
+            .iter()
+            .any(|message| message.text().contains("bounded correction"))
+    );
+    assert!(
+        run.messages
+            .iter()
+            .all(|message| !message.text().contains("bounded correction"))
+    );
+    assert!(queue.drain_all().is_empty());
+}
+
+struct SkipSecondRequest(std::sync::atomic::AtomicUsize);
+#[async_trait::async_trait]
+impl Middleware<(), ()> for SkipSecondRequest {
+    fn name(&self) -> &str {
+        "skip_second_request"
+    }
+    async fn before_model_control(
+        &self,
+        _: &mut RunContext,
+        _: &(),
+        _: &mut ModelRequest,
+    ) -> crate::error::Result<crate::context::MiddlewareControl> {
+        if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            Ok(crate::context::MiddlewareControl::JumpTo(
+                crate::context::LoopTarget::Model,
+            ))
+        } else {
+            Ok(crate::context::MiddlewareControl::Continue)
+        }
+    }
+}
+
+/// A control jump abandons its request, so its correction waits for actual dispatch.
+#[tokio::test]
+async fn model_control_jump_keeps_corrections_for_the_next_dispatched_request() {
+    use std::sync::{Arc, Mutex};
+    use tinyinference_llm::{model::ModelResponse, providers::MockModel, tool::ToolCall};
+    let mut response = ModelResponse::assistant("");
+    response.message.content.clear();
+    response.message.tool_calls = vec![ToolCall::new("read-1", "read", serde_json::json!({}))];
+    response.finish_reason = Some("tool_calls".into());
+    let queue = EphemeralInstructionQueue::new();
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let mut harness: crate::runtime::AgentHarness<()> = crate::runtime::AgentHarness::new();
+    harness.register_model(
+        "mock",
+        Arc::new(MockModel::with_responses(vec![
+            response,
+            ModelResponse::assistant("done"),
+        ])),
+    );
+    harness.register_tool(Arc::new(ReadTool));
+    harness.push_middleware(Arc::new(NativeProducer(queue.clone())));
+    harness.push_middleware(Arc::new(SkipSecondRequest(
+        std::sync::atomic::AtomicUsize::new(0),
+    )));
+    harness.push_middleware(Arc::new(queue.middleware()));
+    harness.push_middleware(Arc::new(RequestCapture(captured.clone())));
+    let run = harness
+        .invoke_default(&(), vec![Message::user("read")])
+        .await
+        .unwrap();
+    let requests = captured.lock().unwrap();
+    assert!(
+        requests
+            .last()
+            .unwrap()
             .messages
             .iter()
             .any(|message| message.text().contains("bounded correction"))

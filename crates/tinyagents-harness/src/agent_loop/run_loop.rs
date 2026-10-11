@@ -755,6 +755,10 @@ impl<State: Send + Sync, Ctx: Send + Sync> AgentHarness<State, Ctx> {
             // already ran above; the wrap onion runs here; lifecycle
             // `after_model` runs below — so ordering is:
             // before_model -> wrap onion (outer..inner..base) -> after_model.
+            self.middleware
+                .run_before_model_dispatch(ctx, state, &mut request)
+                .await?;
+
             let base = ModelCallBase {
                 harness: self,
                 call_id: call_id.clone(),
