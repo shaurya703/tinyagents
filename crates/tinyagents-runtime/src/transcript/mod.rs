@@ -79,6 +79,10 @@ fn reasoning_extra_metadata(content: &[ContentBlock]) -> Option<serde_json::Valu
 /// followed by tool messages`).
 /// Convert one typed durable row to a provider-neutral execution message.
 /// Untyped user text stays literal; hosts apply any legacy marker policy.
+/// Project one row without sequence validation.
+///
+/// Native provider replay must use [`native_transcript_to_messages`] to validate
+/// complete tool declaration/result rounds. Display projections are not replay input.
 pub fn transcript_to_message(msg: &TranscriptMessage) -> Message {
     let text = msg.content.clone();
     match msg.role.as_str() {
@@ -183,7 +187,58 @@ fn ta_call_to_row_call(call: &TaToolCall) -> TranscriptToolCall {
     }
 }
 
-pub fn message_to_flat_transcript(msg: &Message) -> Option<TranscriptMessage> {
+/// Decode complete native history, rejecting incomplete or orphan tool rounds.
+///
+/// Errors identify the invalid row or unanswered call. No rows are relabeled,
+/// repaired or discarded; hosts retain dialect migration policy.
+pub fn native_transcript_to_messages(
+    rows: &[TranscriptMessage],
+) -> Result<Vec<Message>, crate::RuntimeError> {
+    use std::collections::BTreeSet;
+    let mut pending = BTreeSet::new();
+    let mut messages = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let message = transcript_to_message(row);
+        match &message {
+            Message::Tool(tool) => {
+                if !pending.remove(&tool.tool_call_id) {
+                    return Err(crate::RuntimeError::Codec(format!(
+                        "orphan tool result `{}` at row {index}; restore its assistant call declaration",
+                        tool.tool_call_id
+                    )));
+                }
+            }
+            _ if !pending.is_empty() => {
+                return Err(crate::RuntimeError::Codec(format!(
+                    "unanswered tool calls before row {index}: {pending:?}"
+                )));
+            }
+            Message::Assistant(assistant) => {
+                for call in &assistant.tool_calls {
+                    if call.id.is_empty() || !pending.insert(call.id.clone()) {
+                        return Err(crate::RuntimeError::Codec(format!(
+                            "empty or duplicate tool call id at row {index}"
+                        )));
+                    }
+                }
+            }
+            _ => {}
+        }
+        messages.push(message);
+    }
+    if !pending.is_empty() {
+        return Err(crate::RuntimeError::Codec(format!(
+            "unanswered tool calls at end of history: {pending:?}"
+        )));
+    }
+    Ok(messages)
+}
+
+/// Project a display/history row, omitting native tool declarations and media.
+///
+/// Tool result identities remain available to product views. These rows are not
+/// native provider replay input; use [`message_to_native_transcript`] for replay.
+pub fn message_to_display_transcript(msg: &Message) -> Option<TranscriptMessage> {
     Some(match msg {
         Message::System(_) => TranscriptMessage::system(msg.text()),
         Message::User(_) => TranscriptMessage::user(msg.text()),

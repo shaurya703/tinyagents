@@ -61,6 +61,9 @@ Failed persistence and cancelled/failed turns never invoke `after_commit`.
 
 The public `transcript` module converts typed durable rows and inference messages
 without choosing a durable host dialect. Native projection retains tool calls
-and ordered media references; flat projection is deliberately text-only. Hosts
+and ordered media references; display projection is deliberately text-only. Hosts
 keep lossless reconciliation and legacy marker policy in their codecs. See the
 [conversion contract and example](../../../crates/tinyagents-runtime/src/transcript/README.md).
+
+Checked native replay uses `native_transcript_to_messages`; incomplete tool
+rounds return a codec error instead of creating orphan provider messages.

@@ -20,7 +20,7 @@ fn native_tool_round_preserves_calls_and_tool_result_identity() {
     let native = message_to_native_transcript(&message).unwrap();
     assert_eq!(native.tool_calls, row.tool_calls);
     assert!(
-        message_to_flat_transcript(&message)
+        message_to_display_transcript(&message)
             .unwrap()
             .tool_calls
             .is_empty()
@@ -180,9 +180,88 @@ fn custom_records_are_omitted_from_both_execution_projections() {
         payload: serde_json::json!({"private": true}),
         display: Some("note".into()),
     });
-    assert!(message_to_flat_transcript(&custom).is_none());
+    assert!(message_to_display_transcript(&custom).is_none());
     assert!(message_to_native_transcript(&custom).is_none());
     let mut row = TranscriptMessage::user("inbound");
     row.role = "unknown".into();
     assert!(matches!(transcript_to_message(&row), Message::User(_)));
+}
+
+/// Native replay keeps a complete declaration/result pair correlated after projection.
+#[test]
+fn complete_native_tool_round_remains_valid_after_projection_and_replay() {
+    let Message::Assistant(mut assistant) = Message::assistant("") else {
+        unreachable!()
+    };
+    assistant.tool_calls.push(TaToolCall::new(
+        "call-1",
+        "read",
+        serde_json::json!({"path":"a"}),
+    ));
+    let history = vec![
+        Message::Assistant(assistant),
+        Message::tool("call-1", "result"),
+    ];
+    let rows: Vec<_> = history
+        .iter()
+        .filter_map(message_to_native_transcript)
+        .collect();
+    let replay: Vec<_> = rows.iter().map(transcript_to_message).collect();
+    let Message::Assistant(assistant) = &replay[0] else {
+        panic!("assistant declaration");
+    };
+    let Message::Tool(tool) = &replay[1] else {
+        panic!("tool result");
+    };
+    assert_eq!(assistant.tool_calls.len(), 1);
+    assert_eq!(assistant.tool_calls[0].id, tool.tool_call_id);
+    assert_eq!(
+        assistant.tool_calls[0].arguments,
+        serde_json::json!({"path":"a"})
+    );
+    assert_eq!(replay, history);
+}
+
+#[test]
+fn native_history_decode_rejects_display_rows_and_unanswered_or_duplicate_results() {
+    let Message::Assistant(mut assistant) = Message::assistant("") else {
+        unreachable!()
+    };
+    assistant.tool_calls = vec![TaToolCall::new("call-1", "read", serde_json::json!({}))];
+    let messages = vec![
+        Message::Assistant(assistant),
+        Message::tool("call-1", "result"),
+    ];
+    let native: Vec<_> = messages
+        .iter()
+        .filter_map(message_to_native_transcript)
+        .collect();
+    assert_eq!(native_transcript_to_messages(&native).unwrap(), messages);
+    let display: Vec<_> = messages
+        .iter()
+        .filter_map(message_to_display_transcript)
+        .collect();
+    assert!(
+        native_transcript_to_messages(&display)
+            .unwrap_err()
+            .to_string()
+            .contains("orphan")
+    );
+    assert!(
+        native_transcript_to_messages(&native[..1])
+            .unwrap_err()
+            .to_string()
+            .contains("unanswered")
+    );
+    let mut duplicate = native.clone();
+    duplicate.push(native[1].clone());
+    assert!(
+        native_transcript_to_messages(&duplicate)
+            .unwrap_err()
+            .to_string()
+            .contains("orphan")
+    );
+    let mut interrupted = native.clone();
+    interrupted.insert(1, TranscriptMessage::user("interrupt"));
+    assert!(native_transcript_to_messages(&interrupted).is_err());
 }

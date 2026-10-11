@@ -11,7 +11,7 @@ mutating the source row. Untyped user content remains literal text. Unknown role
 strings are treated as user input.
 
 `message_to_native_transcript` retains native tool-call structure and ordered
-media parts. `message_to_flat_transcript` deliberately emits a flat text history,
+media parts. `message_to_display_transcript` deliberately emits a flat text history,
 without assistant tool declarations or user media parts. Both omit custom host
 records. Neither projection is a lossless durable codec: hosts retain raw
 arguments, provider extensions, ids and metadata through `TranscriptCodec`.
@@ -37,7 +37,13 @@ let projected = message_to_native_transcript(&execution).unwrap();
 assert_eq!(projected.content, "hello");
 ```
 
-Seven tests cover native correlation, malformed arguments, ordered media,
+Nine tests cover native correlation, malformed arguments, ordered media,
 ephemeral provider bytes, reasoning replay, literal legacy markers, empty parts,
 custom-record omission and unknown inbound roles. Lossless durable dialect and
 legacy marker behavior remain host integration responsibilities.
+
+`native_transcript_to_messages` checks the complete native sequence before
+replay. Orphan/duplicate results, missing results and interrupted tool rounds
+return a codec error identifying the call or row. Display rows preserve product
+result identities but omit declarations, so they must never be used as native
+replay input. `transcript_to_message` is only a low-level single-row projection.
