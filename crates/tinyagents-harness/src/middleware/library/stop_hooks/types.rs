@@ -72,4 +72,5 @@ pub(super) struct HookRunState<Metrics> {
     pub(super) metrics: Metrics,
     pub(super) iteration: u32,
     pub(super) stopped: bool,
+    pub(super) pause_queued: bool,
 }

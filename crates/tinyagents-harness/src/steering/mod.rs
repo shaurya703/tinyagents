@@ -219,14 +219,37 @@ impl SteeringHandle {
     /// a run but could not be completed. Other commands, including commands
     /// addressed to different runs, remain in FIFO order.
     pub fn retract(&self, target: &SteeringTarget, command: &SteeringCommand) -> bool {
+        self.retract_matching(target, command, false)
+    }
+
+    /// Removes the most recently queued command when its exact target and
+    /// payload match. Producers that enqueue a command after other producers
+    /// can use this to retract their own duplicate command without consuming
+    /// an earlier command with the same payload.
+    pub fn retract_last(&self, target: &SteeringTarget, command: &SteeringCommand) -> bool {
+        self.retract_matching(target, command, true)
+    }
+
+    fn retract_matching(
+        &self,
+        target: &SteeringTarget,
+        command: &SteeringCommand,
+        last: bool,
+    ) -> bool {
         let mut queue = self
             .inner
             .queue
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(index) = queue.iter().position(|(queued_target, queued_command)| {
+        let matches = |(_, (queued_target, queued_command)): &&(_, (SteeringTarget, SteeringCommand))| {
             queued_target == target && queued_command == command
-        }) else {
+        };
+        let index = if last {
+            queue.iter().rposition(matches)
+        } else {
+            queue.iter().position(matches)
+        };
+        let Some(index) = index else {
             return false;
         };
         queue.remove(index);

@@ -179,6 +179,7 @@ where
                 .get_mut(&context.instance_id())
                 .expect("active stop-hook run");
             run.stopped = true;
+            run.pause_queued = true;
             drop(runs);
             if let Some(observer) = &self.observer {
                 observer(&report);
@@ -206,8 +207,14 @@ where
         context: &mut RunContext<Ctx>,
         _error: &TinyAgentsError,
     ) -> Result<()> {
-        if let Some(steering) = &context.steering {
-            steering.retract(
+        let pause_queued = self
+            .runs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&context.instance_id())
+            .is_some_and(|run| run.pause_queued);
+        if pause_queued && let Some(steering) = &context.steering {
+            steering.retract_last(
                 &SteeringTarget::Run(context.run_id().clone()),
                 &SteeringCommand::Pause,
             );
