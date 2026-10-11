@@ -442,3 +442,9 @@ The harness should ship a `testkit` module early. It should include:
 - event recorder
 - trajectory assertions that check tool calls and state changes without relying
   on exact LLM prose
+
+Ephemeral corrections use `EphemeralInstructionQueue`: producers bind each
+instruction to a context instance, and its middleware consumes the queue once
+on the next model-request copy. Terminal hooks clear pending corrections;
+admission reclaims dropped contexts. Corrections never enter durable history.
+See [the queue lifecycle](../../crates/tinyagents-harness/src/middleware/library/ephemeral_instructions/README.md).

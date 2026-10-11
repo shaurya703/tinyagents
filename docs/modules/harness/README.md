@@ -428,3 +428,9 @@ middleware, host-owned state, and stores) and [`observability-overview.md`](obse
 
 The [stop-hook contract](stop-hooks.md) provides ordered policies over generic
 completed-call metrics, with per-context accounting and pause delivery.
+
+Ephemeral corrections use `EphemeralInstructionQueue`: producers bind each
+instruction to a context instance, and its middleware consumes the queue once
+on the next model-request copy. Terminal hooks clear pending corrections;
+admission reclaims dropped contexts. Corrections never enter durable history.
+See [the queue lifecycle](../../../crates/tinyagents-harness/src/middleware/library/ephemeral_instructions/README.md).
