@@ -56,3 +56,11 @@ snapshot, and neutral transcript path/delta data. `on_terminal` follows with a
 completed terminal outcome. Both are observational: their errors, or a
 cooperative cancellation that they observe, cannot change durable success.
 Failed persistence and cancelled/failed turns never invoke `after_commit`.
+
+## Mechanical execution conversion
+
+The public `transcript` module converts typed durable rows and inference messages
+without choosing a durable host dialect. Native projection retains tool calls
+and ordered media references; flat projection is deliberately text-only. Hosts
+keep lossless reconciliation and legacy marker policy in their codecs. See the
+[conversion contract and example](../../../crates/tinyagents-runtime/src/transcript/README.md).

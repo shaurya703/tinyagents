@@ -109,7 +109,7 @@ impl TranscriptTarget {
     /// and launches — the property a `{unix_ts}_{agent}` stem never had.
     ///
     /// `meta.session_id`/`parent_session_id` are populated from `session`
-    /// here, the same way [`Self::rebind_session`] keeps them in sync after a
+    /// here, the same way `Self::rebind_session` keeps them in sync after a
     /// compaction. Leaving them as whatever the caller passed in (typically
     /// `None`, since a newly bound target usually has no opinion on session
     /// identity yet) would otherwise let a session-addressed transcript carry

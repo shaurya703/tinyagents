@@ -268,3 +268,7 @@ TinyAgents is licensed under [GPL-3.0-only](LICENSE).
 The harness provides [after-model stop hooks](docs/modules/harness/stop-hooks.md):
 hosts supply budget/goal policy and accounting; the library owns ordered
 observation, per-run state and pause delivery.
+
+`tinyagents-runtime::transcript` supplies [mechanical execution projections](crates/tinyagents-runtime/src/transcript/README.md)
+for native tool rounds, ordered media references and reasoning replay. Hosts
+retain their lossless durable codecs and legacy marker policy.

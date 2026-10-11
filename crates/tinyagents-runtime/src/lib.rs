@@ -13,6 +13,7 @@ mod hooks;
 mod prefix;
 mod session;
 mod tools;
+pub mod transcript;
 mod types;
 
 pub use builder::SessionBuilder;
