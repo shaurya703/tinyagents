@@ -239,11 +239,10 @@ async fn stop_hook_error_cleanup_preserves_a_caller_pause() {
         })],
     );
     let mut context = run();
-    context
-        .steering
-        .as_ref()
-        .unwrap()
-        .send_to(SteeringTarget::Run(context.run_id().clone()), SteeringCommand::Pause);
+    context.steering.as_ref().unwrap().send_to(
+        SteeringTarget::Run(context.run_id().clone()),
+        SteeringCommand::Pause,
+    );
 
     <StopHookMiddleware<Metrics> as Middleware<(), ()>>::on_error(
         &middleware,
@@ -253,7 +252,10 @@ async fn stop_hook_error_cleanup_preserves_a_caller_pause() {
     .await
     .unwrap();
 
-    assert_eq!(context.steering.as_ref().unwrap().drain(), vec![SteeringCommand::Pause]);
+    assert_eq!(
+        context.steering.as_ref().unwrap().drain(),
+        vec![SteeringCommand::Pause]
+    );
 }
 
 /// When both producers queue the same pause, cleanup retracts the hook's
@@ -270,7 +272,10 @@ async fn stop_hook_error_cleanup_retracts_only_its_pause() {
     );
     let mut context = run();
     let steering = context.steering.as_ref().unwrap().clone();
-    steering.send_to(SteeringTarget::Run(context.run_id().clone()), SteeringCommand::Pause);
+    steering.send_to(
+        SteeringTarget::Run(context.run_id().clone()),
+        SteeringCommand::Pause,
+    );
     middleware
         .after_model(&mut context, &(), &mut ModelResponse::assistant("first"))
         .await
@@ -284,7 +289,10 @@ async fn stop_hook_error_cleanup_retracts_only_its_pause() {
     .await
     .unwrap();
 
-    assert_eq!(context.steering.as_ref().unwrap().drain(), vec![SteeringCommand::Pause]);
+    assert_eq!(
+        context.steering.as_ref().unwrap().drain(),
+        vec![SteeringCommand::Pause]
+    );
 }
 
 /// Completed-call accounting uses the runtime-selected model when available.
