@@ -45,7 +45,10 @@ fn structured_and_trusted_tool_results_survive_native_replay() {
     let Message::Tool(replayed) = transcript_to_message(&row) else {
         panic!("tool");
     };
-    assert_eq!(replayed, message);
+    let Message::Tool(expected) = message else {
+        panic!("tool");
+    };
+    assert_eq!(replayed, expected);
 }
 
 /// Execution parsing marks malformed arguments without mutating the raw row.
