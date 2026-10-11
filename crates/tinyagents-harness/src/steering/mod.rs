@@ -241,7 +241,7 @@ impl SteeringHandle {
             .queue
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let matches = |(_, (queued_target, queued_command)): &&(_, (SteeringTarget, SteeringCommand))| {
+        let matches = |(queued_target, queued_command)| {
             queued_target == target && queued_command == command
         };
         let index = if last {

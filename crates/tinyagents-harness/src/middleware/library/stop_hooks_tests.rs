@@ -256,6 +256,37 @@ async fn stop_hook_error_cleanup_preserves_a_caller_pause() {
     assert_eq!(context.steering.as_ref().unwrap().drain(), vec![SteeringCommand::Pause]);
 }
 
+/// When both producers queue the same pause, cleanup retracts the hook's
+/// later entry and leaves the caller's command intact.
+#[tokio::test]
+async fn stop_hook_error_cleanup_retracts_only_its_pause() {
+    let middleware = StopHookMiddleware::<Metrics>::new(
+        "model",
+        vec![Arc::new(Hook {
+            name: "budget",
+            stop: true,
+            observations: Arc::new(Mutex::new(Vec::new())),
+        })],
+    );
+    let mut context = run();
+    let steering = context.steering.as_ref().unwrap().clone();
+    steering.send_to(SteeringTarget::Run(context.run_id().clone()), SteeringCommand::Pause);
+    middleware
+        .after_model(&mut context, &(), &mut ModelResponse::assistant("first"))
+        .await
+        .unwrap();
+
+    <StopHookMiddleware<Metrics> as Middleware<(), ()>>::on_error(
+        &middleware,
+        &mut context,
+        &TinyAgentsError::Model("failed after stop".into()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(context.steering.as_ref().unwrap().drain(), vec![SteeringCommand::Pause]);
+}
+
 /// Completed-call accounting uses the runtime-selected model when available.
 #[tokio::test]
 async fn stop_hook_metrics_receive_the_resolved_model_name() {
