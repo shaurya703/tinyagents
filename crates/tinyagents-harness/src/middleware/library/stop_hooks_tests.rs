@@ -1,5 +1,5 @@
 use super::*;
-use crate::steering::{SteeringCommand, SteeringHandle};
+use crate::steering::{SteeringCommand, SteeringHandle, SteeringTarget};
 
 #[derive(Clone, Default)]
 struct Metrics {
@@ -224,6 +224,36 @@ async fn stop_hook_error_cleanup_retracts_a_queued_pause() {
     .await
     .unwrap();
     assert!(context.steering.as_ref().unwrap().is_empty());
+}
+
+/// An unrelated pause queued by the caller survives an error when no hook
+/// voted to stop.
+#[tokio::test]
+async fn stop_hook_error_cleanup_preserves_a_caller_pause() {
+    let middleware = StopHookMiddleware::<Metrics>::new(
+        "model",
+        vec![Arc::new(Hook {
+            name: "observer",
+            stop: false,
+            observations: Arc::new(Mutex::new(Vec::new())),
+        })],
+    );
+    let mut context = run();
+    context
+        .steering
+        .as_ref()
+        .unwrap()
+        .send_to(SteeringTarget::Run(context.run_id().clone()), SteeringCommand::Pause);
+
+    <StopHookMiddleware<Metrics> as Middleware<(), ()>>::on_error(
+        &middleware,
+        &mut context,
+        &TinyAgentsError::Model("failed before the hook could stop".into()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(context.steering.as_ref().unwrap().drain(), vec![SteeringCommand::Pause]);
 }
 
 /// Completed-call accounting uses the runtime-selected model when available.
