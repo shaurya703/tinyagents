@@ -272,3 +272,7 @@ observation, per-run state and pause delivery.
 `tinyagents-runtime::transcript` supplies [mechanical execution projections](crates/tinyagents-runtime/src/transcript/README.md)
 for native tool rounds, ordered media references and reasoning replay. Hosts
 retain their lossless durable codecs and legacy marker policy.
+
+Harness correction producers can use context-bound
+[`EphemeralInstructionQueue`](crates/tinyagents-harness/src/middleware/library/ephemeral_instructions/README.md)
+for one-shot model request instructions without persisting them in history.
