@@ -317,8 +317,8 @@ async fn cost_pricing_records_and_enforces_money_budget() {
         "a CostRecorded event must be emitted when priced cost is positive"
     );
     assert!(
-        any_event(&recorder, |e| matches!(e, AgentEvent::UsageRecorded { .. })),
-        "a UsageRecorded event accompanies the recorded usage"
+        !any_event(&recorder, |e| matches!(e, AgentEvent::UsageRecorded { .. })),
+        "the budget middleware must not emit UsageRecorded: the agent loop already does, once per model call"
     );
 
     // A1: the next preflight now requests `JumpTo(End)` (graceful stop)
@@ -394,6 +394,44 @@ async fn below_threshold_run_completes_without_exceeding() {
         !any_event(&recorder, |e| matches!(e, AgentEvent::BudgetWarning { .. })),
         "no BudgetWarning event should be emitted well under the warn threshold"
     );
+}
+
+// ── Usage is recorded once per model call ──────────────────────────────────────
+
+/// With the budget middleware installed, each model call yields exactly one
+/// `UsageRecorded` event. The loop records a call's usage itself; the
+/// middleware used to emit a second, identical event, so journals held twice
+/// the model calls and any total or cache-hit sum built from them doubled.
+#[tokio::test]
+async fn budget_middleware_does_not_double_record_usage() {
+    let recorder = EventRecorder::new();
+    let model = MockModel::with_responses(vec![
+        tool_call_response("d1", "noop", 5, 0),
+        text_response("done", 5, 0),
+    ]);
+    let mw = BudgetMiddleware::new(BudgetLimits {
+        max_total_tokens: Some(100),
+        ..Default::default()
+    });
+    let mut harness: AgentHarness<()> = AgentHarness::new();
+    harness
+        .register_model("mock", Arc::new(model))
+        .set_default_model("mock")
+        .register_tool(Arc::new(FakeTool::returning("noop", "ok")))
+        .push_middleware(Arc::new(mw));
+
+    let ctx = RunContext::new(RunConfig::new("budget-once"), ()).with_events(recorder.sink());
+    let run = harness
+        .invoke_in_context(&(), ctx, vec![Message::user("go")])
+        .await
+        .expect("the run completes");
+
+    let usage_events = recorder
+        .events()
+        .iter()
+        .filter(|e| matches!(e, AgentEvent::UsageRecorded { .. }))
+        .count();
+    assert_eq!(usage_events, run.model_calls);
 }
 
 // ── Test 5: input-token reservation blocks an oversized call in a live run ─────

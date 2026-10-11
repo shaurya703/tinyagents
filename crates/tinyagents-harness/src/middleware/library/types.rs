@@ -256,8 +256,9 @@ pub struct BudgetSpend {
 /// - `after_model` (spend + reconcile): folds the response usage into the
 ///   tracker, prices it via the configured per-model [`ModelPricing`](crate::cost::ModelPricing) table
 ///   (wiring cost into the loop, emitting
-///   [`AgentEvent::UsageRecorded`][crate::events::AgentEvent::UsageRecorded]
-///   and [`AgentEvent::CostRecorded`][crate::events::AgentEvent::CostRecorded]),
+///   [`AgentEvent::CostRecorded`][crate::events::AgentEvent::CostRecorded];
+///   the loop itself emits the call's
+///   [`AgentEvent::UsageRecorded`][crate::events::AgentEvent::UsageRecorded]),
 ///   and emits warn/exceeded events as thresholds are crossed.
 ///
 /// Reservation and refund semantics are intentionally out of scope here; this

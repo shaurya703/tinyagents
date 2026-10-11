@@ -347,7 +347,9 @@ impl<State: Send + Sync, Ctx: Send + Sync> Middleware<State, Ctx> for BudgetMidd
         });
         self.tracker.record(usage, cost);
 
-        ctx.emit(AgentEvent::UsageRecorded { usage });
+        // No `UsageRecorded` here: the agent loop records every non-replayed
+        // call's usage itself, so emitting it again doubled each call in the
+        // journal.
         if cost.total_cost > 0.0 {
             ctx.emit(AgentEvent::CostRecorded { cost });
         }
