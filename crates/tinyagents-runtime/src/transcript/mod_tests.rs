@@ -33,6 +33,21 @@ fn native_tool_round_preserves_calls_and_tool_result_identity() {
     assert_eq!(native.id.as_deref(), Some("call-1"));
 }
 
+#[test]
+fn structured_and_trusted_tool_results_survive_native_replay() {
+    let message = Message::Tool(tinyinference_llm::message::ToolMessage {
+        tool_call_id: "call-1".into(),
+        content: vec![ContentBlock::Json(serde_json::json!({"ok": true}))],
+        trusted_verbatim: true,
+        artifact: None,
+    });
+    let row = message_to_native_transcript(&message).unwrap();
+    let Message::Tool(replayed) = transcript_to_message(&row) else {
+        panic!("tool");
+    };
+    assert_eq!(replayed, message);
+}
+
 /// Execution parsing marks malformed arguments without mutating the raw row.
 #[test]
 fn malformed_arguments_are_invalid_without_changing_the_source_row() {

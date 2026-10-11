@@ -16,6 +16,8 @@ use tinyinference_llm::tool::ToolCall as TaToolCall;
 pub const REASONING_EXT_KEY: &str = "reasoning_content";
 const REASONING_BLOCKS_EXT_KEY: &str = "reasoning_blocks";
 const ORIGIN_EXT_KEY: &str = "message_origin";
+const TOOL_CONTENT_EXT_KEY: &str = "tool_content";
+const TOOL_TRUSTED_VERBATIM_EXT_KEY: &str = "tool_trusted_verbatim";
 
 /// Preserve a nonblank reasoning span verbatim for execution replay.
 pub fn reasoning_content_block(reasoning: Option<&str>) -> Option<ContentBlock> {
@@ -134,6 +136,32 @@ fn assistant_extra_metadata(
     (!metadata.is_empty()).then_some(serde_json::Value::Object(metadata))
 }
 
+fn tool_extra_metadata(
+    content: &[ContentBlock],
+    trusted_verbatim: bool,
+) -> Option<serde_json::Value> {
+    let structured = content
+        .iter()
+        .any(|block| !matches!(block, ContentBlock::Text(_)));
+    if !structured && !trusted_verbatim {
+        return None;
+    }
+    let mut metadata = serde_json::Map::new();
+    if structured {
+        metadata.insert(
+            TOOL_CONTENT_EXT_KEY.into(),
+            serde_json::to_value(content).expect("tool content is serializable"),
+        );
+    }
+    if trusted_verbatim {
+        metadata.insert(
+            TOOL_TRUSTED_VERBATIM_EXT_KEY.into(),
+            serde_json::Value::Bool(true),
+        );
+    }
+    Some(serde_json::Value::Object(metadata))
+}
+
 /// Convert one transcript row into a harness [`Message`].
 ///
 /// Role strings map onto the typed arms: an assistant row's `tool_calls` become
@@ -214,8 +242,18 @@ pub fn transcript_to_message(msg: &TranscriptMessage) -> Message {
                 .clone()
                 .or_else(|| msg.id.clone())
                 .unwrap_or_default(),
-            content: vec![ContentBlock::Text(text)],
-            trusted_verbatim: false,
+            content: msg
+                .extra_metadata
+                .as_ref()
+                .and_then(|meta| meta.get(TOOL_CONTENT_EXT_KEY))
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_else(|| vec![ContentBlock::Text(text)]),
+            trusted_verbatim: msg
+                .extra_metadata
+                .as_ref()
+                .and_then(|meta| meta.get(TOOL_TRUSTED_VERBATIM_EXT_KEY))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             artifact: None,
         }),
         // "user" and any unrecognized role default to a user turn — the safest
@@ -358,6 +396,7 @@ pub fn message_to_display_transcript(msg: &Message) -> Option<TranscriptMessage>
         Message::Tool(t) => {
             let mut cm = TranscriptMessage::tool(msg.text());
             cm.id = Some(t.tool_call_id.clone());
+            cm.extra_metadata = tool_extra_metadata(&t.content, t.trusted_verbatim);
             cm
         }
         Message::Custom(c) => {
@@ -395,6 +434,7 @@ pub fn message_to_native_transcript(msg: &Message) -> Option<TranscriptMessage> 
         Message::Tool(t) => {
             let mut cm = TranscriptMessage::tool_result(t.tool_call_id.clone(), msg.text());
             cm.id = Some(t.tool_call_id.clone());
+            cm.extra_metadata = tool_extra_metadata(&t.content, t.trusted_verbatim);
             cm
         }
         Message::Custom(c) => {
