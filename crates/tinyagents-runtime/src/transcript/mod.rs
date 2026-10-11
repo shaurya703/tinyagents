@@ -41,6 +41,7 @@ const REASONING_BLOCK_SEPARATOR: &str = "\n\n";
 /// persisted transcript and the reasoning shown for that step.
 pub fn reasoning_from_content(content: &[ContentBlock]) -> Option<String> {
     let mut parts = Vec::new();
+    let mut last_observed: Option<(String, bool)> = None;
     for block in content {
         let (text, is_thinking) = match block {
             ContentBlock::Thinking { text, .. } => (text.as_str(), true),
@@ -60,10 +61,14 @@ pub fn reasoning_from_content(content: &[ContentBlock]) -> Option<String> {
         // and provider-extension blocks; do not render that pair twice. Keep
         // repeated blocks of the same kind because each is a real reasoning
         // span, even when their text happens to be identical.
-        if let Some((previous, previous_is_thinking)) = parts.last()
-            && previous == text
-            && *previous_is_thinking != is_thinking
-        {
+        let is_duplicate =
+            last_observed
+                .as_ref()
+                .is_some_and(|(previous, previous_is_thinking)| {
+                    previous == text && *previous_is_thinking != is_thinking
+                });
+        last_observed = Some((text.to_string(), is_thinking));
+        if is_duplicate {
             // The current block is the legacy duplicate; retain the first
             // span so a following same-kind span is still preserved.
             continue;
@@ -281,7 +286,11 @@ fn ta_call_to_row_call(call: &TaToolCall) -> TranscriptToolCall {
     TranscriptToolCall {
         id: call.id.clone(),
         name: call.name.clone(),
-        arguments: call.arguments.to_string(),
+        arguments: if call.is_invalid() {
+            call.arguments.as_str().unwrap_or_default().to_string()
+        } else {
+            call.arguments.to_string()
+        },
         extra_content: None,
     }
 }

@@ -58,6 +58,15 @@ fn malformed_arguments_are_invalid_without_changing_the_source_row() {
         row.tool_calls[0].extra_content,
         Some(serde_json::json!({"provider": "raw"}))
     );
+    let replay = transcript_to_message(&message_to_native_transcript(&message).unwrap());
+    let Message::Assistant(replayed) = replay else {
+        panic!("assistant");
+    };
+    assert!(replayed.tool_calls[0].is_invalid());
+    assert_eq!(
+        replayed.tool_calls[0].arguments,
+        serde_json::Value::String("{unfinished".into())
+    );
 }
 
 #[test]
@@ -191,6 +200,18 @@ fn reasoning_replays_verbatim_and_retains_multiple_spans() {
     assert_eq!(
         reasoning_from_content(&repeated).as_deref(),
         Some("repeat\n\nrepeat")
+    );
+    let duplicate_pair_then_span = vec![
+        ContentBlock::Thinking {
+            text: "x".into(),
+            signature: None,
+        },
+        ContentBlock::ProviderExtension(serde_json::json!({"reasoning_content": "x"})),
+        ContentBlock::ProviderExtension(serde_json::json!({"reasoning_content": "x"})),
+    ];
+    assert_eq!(
+        reasoning_from_content(&duplicate_pair_then_span).as_deref(),
+        Some("x\n\nx")
     );
     assert!(reasoning_content_block(Some(" \n ")).is_none());
 }
