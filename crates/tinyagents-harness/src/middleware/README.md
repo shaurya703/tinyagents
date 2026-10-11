@@ -154,3 +154,8 @@ tracing — lives in `library/` and is re-exported through this module. See
   `on_error` for anything beyond best-effort side effects (logging, metrics).
 - Wrap middleware that retry `next.run(..)` are responsible for their own
   budget/backoff; the stack does not cap retry attempts.
+
+`before_model_dispatch` observes or transforms ephemeral content on the final
+request after model-control admission and final profile resolution. It runs
+before the model wrap pipeline, in registration order. Admission/control policy
+belongs in `before_model_control`; final request observers do not request control.
