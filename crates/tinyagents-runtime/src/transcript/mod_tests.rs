@@ -58,7 +58,9 @@ fn malformed_arguments_are_invalid_without_changing_the_source_row() {
         row.tool_calls[0].extra_content,
         Some(serde_json::json!({"provider": "raw"}))
     );
-    let replay = transcript_to_message(&message_to_native_transcript(&message).unwrap());
+    let replay = transcript_to_message(
+        &message_to_native_transcript(&Message::Assistant(message.clone())).unwrap(),
+    );
     let Message::Assistant(replayed) = replay else {
         panic!("assistant");
     };
